@@ -1,0 +1,121 @@
+
+COM3.DOC
+By: Matt Trask
+13 Dec 87
+
+
+	CAVEAT EMPTOR: this a megahack!  There exists the possibility of
+destroying your hardware if you do this, and the software is not 
+supported and probably will not work with future releases of OS/2. I
+cannot accept any responsibility for your use of the techniques 
+described here.  If you are not confident in your abilities, PLEASE
+get help from someone who knows how to make the modifications.  In
+addition, the device driver that is provided here is trash - I won't
+admit to having written it as it is terrible style.  However, it will
+do the required work.
+	I have only tested this with an AT klone, a Kaypro AT-style
+serial/parallel card, and the IBM beta OS/2 (Internal version 3.86) -
+it works as documented on my system but I can't guarantee that it will 
+work anywhere else.  Use this stuff at your own risk!
+	Now that the formalities are done, I will try to support this
+hack - if you try it and it doesn't work, leave bixmail to
+'matt.trask', or better yet, come join my 'boating' conference
+(and bring some friends), and I'll see if I can help.
+
+
+Purpose
+
+ 	I found that the two comm ports supported by OS/2 on an AT
+were not adequate for my needs (modem, mouse, and TNC for packet
+radio) so thus this project was born.  A little poking around with
+my favorite debugger (Pfix Plus - highly recommended) showed that
+when the serial mouse driver is loaded for COM2, it gets the base
+address for the COM2 card from 40:2 and stuffs a word of zeroes in
+its place so that other drivers (such as the COM01.SYS serial
+driver for AT machines) will not know that the port exists.  From
+this I reasoned that if I could create a serial port at an address
+other than 0x2f8 or 0x3f8 that used an IRQ other than 3 or 4, OS/2
+should be happy to support it for me.  What follows is a description 
+of the cuts and jumpers that do this, and the necessary software
+hacks to complete the job.  The software is pretty simple - just a 
+matter of patching the COM01.SYS driver to find the new port and
+set its interrupt level.  The only other part is a simple device
+driver that pokes the base port address of the modified comm card
+into the BIOS data are at 40:2.  So, gentlemen, start your
+soldering irons, E pluribus hackum!
+
+
+Hardware Modification
+
+	This mod should work on most any AT style serial/parallel adapter. 
+In addition, it will probably work on XT type serial cards but I
+can't guarantee that they will work at AT bus speeds.  The idea is to
+change the address decoding logic to select base ports of 0x3f8/0x1f8
+instead of 0x3f8/0x2f8, and change the IRQ level for COM2 from IRQ3
+to IRQ5.  (You can use IRQ2 if you prefer - I used IRQ5 because my
+LAN card wants IRQ2)  Although the AT Tech Ref claims that the fixed
+disk controller uses 0x1f0-0x1f8, that is a typographic error.  It
+really uses 0x1f0-0x1f7, as you can verify by reading the fixed disk
+controller docs.  IRQ5 is reserved for use by a second parallel port,
+if you are using two interrupt driven LPT ports in your system you 
+will have to use IRQ2 for this modification.
+	AT the card edge connector cut the traces for address lines A8 and
+A9 (connector tabs A22 and A23 on the component side of the board). 
+Solder two jumpers to cross-connect these two pads to each others
+traces.  This allows the jumper block to change the sense of A9
+instead of A8 as it was designed.  Then turn the board over and cut
+the trace to IRQ3 (pad B25).  Jumper this trace to IRQ5 (pad B23) or
+to IRQ2 (pad B4) as required.
+	There, you're done.  Easy wasn't it?  Recheck your work - a
+multimeter will be helpful to make sure that you didn't accidentally
+short one of the lines to an adjacent pad or trace.
+
+
+Software
+
+	There are two parts to the software used to support the
+additional serial port - patching COM01.SYS and writing a port
+initialization driver.  This example assumes that you have made the
+hardware mods for base port 0x1f8 and IRQ 5 - make changes as needed
+in the following instructions.
+	I've provided the driver to support a base address of 0x1f8 in 
+COMINIT.SYS and the source in COMINIT.ASM in case you need to change it.
+The batch file 'MAKE.CMD' will run in protected mode to assemble and
+link the driver if you make changes to it.
+	
+The patches to COM01.SYS are as follows:
+
+		C> debug com01.sys
+			- n com03.sys
+			- u 22a7
+					cmp dx, 2f8		/* you should see something like */
+					mov	cx, 045a	/* this, otherwise don't continue */
+					jz	22b3
+					.
+					.
+			- e 22aa	02.01
+			- e 22b6	03.05
+			- w
+			- q
+		C>
+	
+This will write out a copy of 'COM01.SYS' with the changes under the
+new name 'COM03.SYS'.
+
+
+Usage
+	
+	The following is an excerpt from my CONFIG.SYS that shows the
+correct order for installation.  This assumes that you are using
+COM2 for your serial mouse, so the new COM port will be supported
+by OS/2 as logical device 'COM2'.
+
+	DEVICE=C:\POINTDD.SYS
+	DEVICE=C:\MOUSEA02.SYS SERIAL=COM2
+	rem DEVICE=C:\COM01.SYS		/* original OS/2 serial driver */
+	device=c:\cominit.sys		/* port base setup driver */
+	device=c:\com03.sys			/* modified COM01.SYS */
+
+Reboot OS/2, use MODE.COM to set up the proper parameters for the
+device you have on the port, and off you go.  Happy hacking, let me 
+know if this works for you.

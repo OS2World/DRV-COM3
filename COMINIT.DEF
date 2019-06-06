@@ -1,0 +1,5 @@
+; module definition file for COMINIT.SYS device driver
+LIBRARY COMINIT
+PROTMODE
+CODE PRELOAD
+DATA PRELOAD
